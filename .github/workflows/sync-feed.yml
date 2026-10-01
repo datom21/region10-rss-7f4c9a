@@ -26,7 +26,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          curl             --fail             --location             --silent             --show-error             --retry 3             --retry-delay 2             "$RSS_SOURCE_URL"             -o feed.xml.new
+          curl \
+            --fail \
+            --location \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-delay 2 \
+            "$RSS_SOURCE_URL" \
+            -o feed.xml.new
 
           grep -q "<rss" feed.xml.new
           grep -q "<channel>" feed.xml.new
@@ -47,4 +55,18 @@ jobs:
 
           git add feed.xml
           git commit -m "Update RSS feed"
-          git push
+
+          if push_output=$(git push 2>&1); then
+            echo "$push_output"
+            exit 0
+          else
+            push_status=$?
+            echo "$push_output"
+
+            if echo "$push_output" | grep -Eqi "fetch first|non-fast-forward"; then
+              echo "Concurrent feed update detected. Primary Apps Script sync already changed main; fallback exits successfully."
+              exit 0
+            fi
+
+            exit "$push_status"
+          fi
