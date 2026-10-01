@@ -1,0 +1,50 @@
+name: Sync RSS feed
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-rss-feed
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Fetch RSS feed
+        env:
+          RSS_SOURCE_URL: ${{ secrets.RSS_SOURCE_URL }}
+        run: |
+          set -euo pipefail
+
+          curl             --fail             --location             --silent             --show-error             --retry 3             --retry-delay 2             "$RSS_SOURCE_URL"             -o feed.xml.new
+
+          grep -q "<rss" feed.xml.new
+          grep -q "<channel>" feed.xml.new
+
+          mv feed.xml.new feed.xml
+
+      - name: Commit feed only when changed
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- feed.xml; then
+            echo "No feed changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add feed.xml
+          git commit -m "Update RSS feed"
+          git push
